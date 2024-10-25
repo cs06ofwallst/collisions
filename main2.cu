@@ -201,9 +201,12 @@ int main() {
 
 __device__ int CSideSign1(float3 o, float3 v1, float3 v2, float3 l) {
     // TODO
-    return 0; // Placeholder
+    return 0; 
 }
-
+__device__ int CSideSign2(float3 o, float3 v1, float3 v2, float3 l) {
+    // TODO
+    return 0; 
+}
 __global__ void UnprojectedContourTestForCCD(float3* vertices, int numVertices, float alpha, float3 l, bool* result) {
     int idx = blockIdx.x * blockDim.x + threadIdx.x;
     if (idx >= numVertices) return;

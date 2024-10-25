@@ -330,3 +330,79 @@ int main() {
 
     return 0;
 }
+#include <cuda_runtime.h>
+#include <stdio.h>
+
+// Dummy struct definitions for BVH node and cone, replace with actual data structures
+struct BVHNode {
+    bool isLeaf;
+    float apexAngle;  // Example field for the cone apex angle
+    BVHNode* leftChild;
+    BVHNode* rightChild;
+};
+
+struct NormalCone {
+    float apexAngle;
+    // Other properties of the normal cone associated with BVH node
+};
+
+struct BVTTFront {
+    // Properties of the BVTT front segment
+};
+
+// Forward declaration of auxiliary functions to be implemented
+__device__ bool IsLeaf(const BVHNode* node) {
+    // TODO: Implement function to determine if the node is a leaf
+    return node->isLeaf;
+}
+
+__device__ bool UnprojectedContourTest(const NormalCone* CN) {
+    // TODO: Implement function to perform the unprojected contour test
+    return false;  // Placeholder
+}
+
+__device__ void FrontTracking(const BVTTFront* frontN) {
+    // TODO: Implement front tracking
+}
+
+__device__ void SelfCollideWithGuidedFrontTracking(BVHNode* N, BVTTFront* FrontN, NormalCone* CN) {
+    // Step 1: Check if the node is a leaf
+    if (IsLeaf(N)) {
+        return;  // Traversal terminated
+    }
+
+    // Step 2: Check the apex angle of the cone
+    if (CN->apexAngle < M_PI) {
+        // Step 3: Perform the unprojected contour test
+        if (UnprojectedContourTest(CN)) {
+            return;  // The region is self-collision free
+        }
+    }
+
+    // Step 4: Recursively check the left and right children
+    SelfCollideWithGuidedFrontTracking(N->leftChild, FrontN, CN);
+    SelfCollideWithGuidedFrontTracking(N->rightChild, FrontN, CN);
+
+    // Step 5: Perform front tracking
+    FrontTracking(FrontN);
+}
+
+int main() {
+    // Example node and front data (replace with actual BVH and normal cone data)
+    BVHNode rootNode;
+    NormalCone cone;
+    BVTTFront front;
+
+    // Initialize the root node and cone (dummy data for illustration)
+    rootNode.isLeaf = false;
+    rootNode.leftChild = nullptr;  // Replace with actual left child
+    rootNode.rightChild = nullptr;  // Replace with actual right child
+    cone.apexAngle = 2.0f;  // Example angle
+
+    // Launch the kernel to perform the self-collision check
+    SelfCollideWithGuidedFrontTracking(&rootNode, &front, &cone);
+
+    // Add further logic as needed
+
+    return 0;
+}

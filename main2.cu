@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
+#include "collisions_continuous.cu"
 
 __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3 coneAxis, int* result) {
     int i = threadIdx.x;

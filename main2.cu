@@ -110,11 +110,10 @@ int main() {
     return 0;
 }
 
-// SideSign calculates the sign of the relative position
-// of points in relation to the normal cone projection.
+// SideSign to be implemented
 __device__ int SideSign(float3 p1, float3 p2, float3 p3, float3 axis) {
     // TODO
-    return 1; // Placeholder return
+    return 1; 
 }
 
 // BVH Node structure

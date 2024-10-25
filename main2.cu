@@ -2,7 +2,6 @@
 #include <cuda_runtime.h>
 
 __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3 coneAxis, int* result) {
-    // Calculate thread index
     int i = threadIdx.x;
     if (i >= numVertices - 1) return;
 

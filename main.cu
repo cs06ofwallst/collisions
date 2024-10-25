@@ -118,3 +118,93 @@ __device__ int SideSign(float3 p1, float3 p2, float3 p3, float3 axis) {
     // TODO: Implement the actual calculation for SideSign
     return 1; // Placeholder return
 }
+
+// BVH Node structure
+struct BVHNode {
+    bool isLeaf;         // Is this a leaf node
+    float apexAngle;     // Apex angle of the normal cone
+    float3* vertices;    // Vertices associated with this node
+    int numVertices;     // Number of vertices in this node
+    BVHNode* leftChild;  // Left child of the BVH node
+    BVHNode* rightChild; // Right child of the BVH node
+    float3 coneAxis;     // Normal cone axis
+};
+
+// Forward declarations of auxiliary functions
+__device__ bool UnprojectedContourTest(float3* vertices, int numVertices, float3 coneAxis, float apexAngle);
+__device__ void Collide(BVHNode* leftNode, BVHNode* rightNode);
+
+// Recursive function to traverse the BVH and perform the SelfCollide algorithm
+__device__ void SelfCollide(BVHNode* N) {
+    // Base case: if this node is a leaf, terminate the traversal
+    if (N->isLeaf) {
+        return;  // Traversal terminated
+    }
+
+    // Check if the apex angle of the normal cone is less than pi
+    if (N->apexAngle < M_PI) {
+        // Perform the unprojected contour test
+        if (UnprojectedContourTest(N->vertices, N->numVertices, N->coneAxis, N->apexAngle)) {
+            return;  // This mesh does not have self-collisions
+        }
+    }
+
+    // Recursively check the left and right children
+    SelfCollide(N->leftChild);
+    SelfCollide(N->rightChild);
+
+    // Check for collisions between the left and right children
+    Collide(N->leftChild, N->rightChild);
+}
+
+// Dummy UnprojectedContourTest for now (to be implemented as in the previous algorithm)
+__device__ bool UnprojectedContourTest(float3* vertices, int numVertices, float3 coneAxis, float apexAngle) {
+    // TODO: Implement UnprojectedContourTest logic
+    return false;  // Placeholder: Assume no self-collisions for now
+}
+
+// Dummy Collide function to handle collisions between two BVH nodes
+__device__ void Collide(BVHNode* leftNode, BVHNode* rightNode) {
+    // TODO: Implement actual collision detection logic between left and right nodes
+}
+
+// Main kernel function to initiate SelfCollide on a BVH root
+__global__ void SelfCollideKernel(BVHNode* root) {
+    // Launch the SelfCollide recursive function on the BVH root
+    SelfCollide(root);
+}
+
+int main() {
+    // Construct a simple BVHNode for testing purposes
+    BVHNode root;
+    BVHNode leftChild, rightChild;
+
+    // Initialize the BVHNode properties (this is just an example, you'd normally build the BVH)
+    root.isLeaf = false;
+    root.apexAngle = M_PI / 4;  // Example apex angle
+    root.coneAxis = make_float3(0, 0, 1);  // Example cone axis
+    root.leftChild = &leftChild;
+    root.rightChild = &rightChild;
+
+    // Example initialization for the children
+    leftChild.isLeaf = true;  // Left child is a leaf
+    rightChild.isLeaf = true;  // Right child is a leaf
+
+    // Device memory allocation for the root node
+    BVHNode* d_root;
+    cudaMalloc((void**)&d_root, sizeof(BVHNode));
+
+    // Copy the root node to the device (note: this is shallow copy, adjust for deep copying if needed)
+    cudaMemcpy(d_root, &root, sizeof(BVHNode), cudaMemcpyHostToDevice);
+
+    // Launch the SelfCollide kernel with 1 thread, since it's recursive
+    SelfCollideKernel<<<1, 1>>>(d_root);
+
+    // Synchronize the device
+    cudaDeviceSynchronize();
+
+    // Free device memory
+    cudaFree(d_root);
+
+    return 0;
+}

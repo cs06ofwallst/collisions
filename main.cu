@@ -208,3 +208,125 @@ int main() {
 
     return 0;
 }
+
+__device__ int CSideSign1(float3 o, float3 v1, float3 v2, float3 l) {
+    // TODO: Implement this function to compute the side sign for the first contour segment
+    return 0; // Placeholder
+}
+
+__device__ int CSideSign2(float3 vi_prime, float3 o, float3 r, float3 l) {
+    // TODO: Implement this function to compute the side sign for the intersection test
+    return 0; // Placeholder
+}
+
+__global__ void UnprojectedContourTestForCCD(float3* vertices, int numVertices, float alpha, float3 l, bool* result) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= numVertices) return;
+
+    // Prepare parameters for the kernel test and intersection test
+    float3 o = make_float3(0, 0, 0);
+    for (int i = 0; i < numVertices; ++i) {
+        o.x += vertices[i].x;
+        o.y += vertices[i].y;
+        o.z += vertices[i].z;
+    }
+    o.x /= numVertices;
+    o.y /= numVertices;
+    o.z /= numVertices;
+
+    // Check if l is parallel to {0, 1, 0}
+    float3 r;
+    if (l.x == 0 && l.z == 0) {
+        r = make_float3(1, 0, 0);  // Set r to {1, 0, 0}
+    } else {
+        r = make_float3(0, 1, 0);  // Set r to {0, 1, 0}
+    }
+
+    // Initialize intersection number to zero
+    int intNum = 0;
+
+    // Get side sign at the first contour segment
+    int s0 = CSideSign1(o, vertices[0], vertices[1], l);
+    if (s0 == 0) {
+        *result = false;
+        return;
+    }
+
+    // Perform kernel test and intersection test on each contour segment
+    for (int i = 0; i < numVertices; ++i) {
+        float3 vi = vertices[i];
+        float3 vi_next = vertices[(i + 1) % numVertices];  // Wrap around to the first vertex if necessary
+
+        // Perform side test
+        if (s0 != CSideSign1(o, vi, vi_next, l)) {
+            *result = false;
+            return;
+        }
+
+        // Perform intersection test
+        int s1 = CSideSign2(vi, o, r, l);
+        int s2 = CSideSign2(vi_next, o, r, l);
+
+        if (s1 == 0 || s2 == 0) {
+            *result = false;  // Can't determine the intersection
+            return;
+        }
+
+        if ((s2 == s0) && (s1 != s2)) {
+            intNum++;
+        }
+
+        if (intNum > 1) {
+            *result = false;  // More than one intersection
+            return;
+        }
+    }
+
+    *result = true;
+}
+
+int main() {
+    // Define number of vertices and the normal cone parameters
+    int numVertices = 5;
+    float alpha = 45.0f;  // Example apex angle
+    float3 l = make_float3(0, 1, 0);  // Example axis of the cone
+
+    // Define vertices of the normal cone (replace with actual vertices)
+    float3 h_vertices[] = {
+        make_float3(1, 0, 0),
+        make_float3(0, 1, 0),
+        make_float3(-1, 0, 0),
+        make_float3(0, -1, 0),
+        make_float3(0.5f, 0.5f, 0)
+    };
+
+    // Allocate device memory for vertices and result
+    float3* d_vertices;
+    bool* d_result;
+    bool h_result;
+
+    cudaMalloc(&d_vertices, numVertices * sizeof(float3));
+    cudaMalloc(&d_result, sizeof(bool));
+
+    // Copy vertices to device
+    cudaMemcpy(d_vertices, h_vertices, numVertices * sizeof(float3), cudaMemcpyHostToDevice);
+
+    // Launch the kernel
+    UnprojectedContourTestForCCD<<<1, 1>>>(d_vertices, numVertices, alpha, l, d_result);
+
+    // Copy result back to host
+    cudaMemcpy(&h_result, d_result, sizeof(bool), cudaMemcpyDeviceToHost);
+
+    // Check result
+    if (h_result) {
+        printf("No self-intersection on the projected contour.\n");
+    } else {
+        printf("Self-intersection detected or result is undetermined.\n");
+    }
+
+    // Free device memory
+    cudaFree(d_vertices);
+    cudaFree(d_result);
+
+    return 0;
+}

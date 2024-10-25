@@ -314,8 +314,6 @@ int main() {
 
     return 0;
 }
-#include <cuda_runtime.h>
-#include <stdio.h>
 
 struct NormalCone {
     float apexAngle;

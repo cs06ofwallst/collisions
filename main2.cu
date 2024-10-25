@@ -331,13 +331,13 @@ __device__ bool IsLeaf(const BVHNode* node) {
 }
 
 __device__ void FrontTracking(const BVTTFront* frontN) {
-    // TODO: Implement front tracking
+    // TODO: impl front tracking
 }
 
 __device__ void SelfCollideWithGuidedFrontTracking(BVHNode* N, BVTTFront* FrontN, NormalCone* CN) {
     // leaf?
     if (IsLeaf(N)) {
-        return;  // Traversal terminated
+        return;  // done
     }
 
     // apex angle

@@ -177,8 +177,8 @@ int main() {
     root.leftChild = &leftChild;
     root.rightChild = &rightChild;
 
-    leftChild.isLeaf = true;  // Left child is a leaf
-    rightChild.isLeaf = true;  // Right child is a leaf
+    leftChild.isLeaf = true;  // left is leaf
+    rightChild.isLeaf = true;  // right is leaf
 
     //mem alloc
     BVHNode* d_root;

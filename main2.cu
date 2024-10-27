@@ -29,7 +29,12 @@ __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3
 
     // r is the axis perpendicular to the cone axis
     float3 r = make_float3(1, 0, 0);
-
+    //check parallel to (0,1,0)
+    if (coneAxis.x == 0.0f && coneAxis.z == 0.0f && coneAxis.y != 0.0f) {
+        float3 r = make_float3(1, 0, 0);
+    } else {
+        float3 r1 = make_float3(0, 1, 0);
+    }
     // side sign at 1st contour segment
     int s0 = SideSign(o, vertices[0], vertices[1], coneAxis);  // TODO: implement
     if (s0 == 0) {

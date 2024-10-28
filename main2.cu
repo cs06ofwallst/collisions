@@ -34,6 +34,7 @@ __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3
         float3 r = make_float3(1, 0, 0);
     } else {
         float3 r1 = make_float3(0, 1, 0);
+        float3 r = make_float3(0, coneAxis.y, 0);
     }
     // side sign at 1st contour segment
     int s0 = SideSign(o, vertices[0], vertices[1], coneAxis);  // TODO: implement
@@ -41,6 +42,7 @@ __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3
         res = 0;  // false
     }
     __syncthreads();
+
 
     // kernel + intersection test on each contour segment in parallel
     if (res == 1) {

@@ -1,8 +1,34 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include "collisions_continuous.cu"
+__device__ float Side(float3 a, float3 b, float3 c, float3 l) {
+    // (a - c) and (b - c)
+    float3 ac = make_float3(a.x - c.x, a.y - c.y, a.z - c.z);
+    float3 bc = make_float3(b.x - c.x, b.y - c.y, b.z - c.z);
 
-__global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3 coneAxis, int* result) {
+    // cross product (a - c) x (b - c)
+    float3 cross_product = make_float3(
+        ac.y * bc.z - ac.z * bc.y,
+        ac.z * bc.x - ac.x * bc.z,
+        ac.x * bc.y - ac.y * bc.x
+    );
+
+    float side = cross_product.x * l.x + cross_product.y * l.y + cross_product.z * l.z;
+    return side;
+}
+
+__device__ int SideSign(float3 a, float3 b, float3 c, float3 l) {
+    float side = Side(a, b, c, l);
+    if (side > 0) {
+        return 1;
+    } else if (side < 0) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+__global__ bool UnprojectedContourTest(float3* vertices, float3 coneAxis) {
+    int numVertices = sizeof(vertices)/sizeof(float3);
     int i = threadIdx.x;
     if (i >= numVertices - 1) return;
 
@@ -39,38 +65,36 @@ __global__ void UnprojectedContourTest(float3* vertices, int numVertices, float3
     // side sign at 1st contour segment
     int s0 = SideSign(o, vertices[0], vertices[1], coneAxis);  // TODO: implement
     if (s0 == 0) {
-        res = 0;  // false
+        return false;
     }
     __syncthreads();
-
-
-    // kernel + intersection test on each contour segment in parallel
-    if (res == 1) {
+   int n = 0;
+   for (int i=0; i<numVertices; i++) {
+    
+    // side + intersection test on each contour segment in parallel
         // side
         int s1 = SideSign(o, vertices[i], vertices[(i + 1) % numVertices], coneAxis); 
         if (s0 != s1) {
-            res = 0;  // false
+            return false;  
         }
 
         // intersection
         int s2 = SideSign(vertices[i], o, o + r, coneAxis);  
-        if (s1 == 0 || s2 == 0) {
-            res = 0;  // false
+        int s3 = SideSign(vertices[i+1], o, o + r, coneAxis);
+        if (s3 == 0 || s2 == 0) {
+            return false;  
         }
 
-        if (s2 == s0 && s1 != s2) {
-            atomicAdd(&intNum, 1);  // atomic operation for shared variable
-            if (intNum > 1) {
-                res = 0;  // false
+        if (s3 == s0 && s3 != s2) {
+            n++;  // atomic operation for shared variable
+            if (n > 1) {
+                return false;
             }
         }
-    }
-    __syncthreads();
-
-    // finan res
-    if (threadIdx.x == 0) {
-        *result = res;
-    }
+    
+     __syncthreads();
+   }
+  return true;
 }
 
 // example main
@@ -116,12 +140,6 @@ int main() {
     }
 
     return 0;
-}
-
-// SideSign to be implemented
-__device__ int SideSign(float3 p1, float3 p2, float3 p3, float3 axis) {
-    // TODO
-    return 1; 
 }
 
 // BVH Node structure
@@ -215,69 +233,74 @@ __device__ int CSideSign2(float3 o, float3 v1, float3 v2, float3 l) {
     // TODO
     return 0; 
 }
-__global__ void UnprojectedContourTestForCCD(float3* vertices, int numVertices, float alpha, float3 l, bool* result) {
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= numVertices) return;
+__global__ void UnprojectedContourTestForCCD(float3* vertices, float3 coneAxis) {
+    int numVertices = sizeof(vertices)/sizeof(float3);
+    int i = threadIdx.x;
+    if (i >= numVertices - 1) return;
 
+    // init intersection nr to 0
+    __shared__ int intNum;
+    if (threadIdx.x == 0) intNum = 0;
+    __syncthreads();
+
+    // determine self intersection
+    __shared__ int res;
+    if (threadIdx.x == 0) res = 1;  // assume true
+    __syncthreads();
+
+    // params
     float3 o = make_float3(0, 0, 0);
-    for (int i = 0; i < numVertices; ++i) {
-        o.x += vertices[i].x;
-        o.y += vertices[i].y;
-        o.z += vertices[i].z;
+    for (int j = 0; j < numVertices; j++) {
+        o.x += vertices[j].x;
+        o.y += vertices[j].y;
+        o.z += vertices[j].z;
     }
     o.x /= numVertices;
     o.y /= numVertices;
     o.z /= numVertices;
 
-    // check if l is parallel to {0, 1, 0}
-    float3 r;
-    if (l.x == 0 && l.z == 0) {
-        r = make_float3(1, 0, 0);  // Set r to {1, 0, 0}
+    // r is the axis perpendicular to the cone axis
+    float3 r = make_float3(1, 0, 0);
+    //check parallel to (0,1,0)
+    if (coneAxis.x == 0.0f && coneAxis.z == 0.0f && coneAxis.y != 0.0f) {
+        float3 r = make_float3(1, 0, 0);
     } else {
-        r = make_float3(0, 1, 0);  // Set r to {0, 1, 0}
+        float3 r1 = make_float3(0, 1, 0);
+        float3 r = make_float3(0, coneAxis.y, 0);
     }
-
-    // init
-    int intNum = 0;
-
-    // get side sign
-    int s0 = CSideSign1(o, vertices[0], vertices[1], l);
+    // side sign at 1st contour segment
+    int s0 = CSideSign1(o, vertices[0], vertices[1], coneAxis);  // TODO: implement
     if (s0 == 0) {
-        *result = false;
-        return;
+        return false;
     }
-
-    // kernel + intesection test on each contour on each contour segment
-    for (int i = 0; i < numVertices; ++i) {
-        float3 vi = vertices[i];
-        float3 vi_next = vertices[(i + 1) % numVertices];  
-
+    __syncthreads();
+   int n = 0;
+   for (int i=0; i<numVertices; i++) {
+    
+    // side + intersection test on each contour segment in parallel
         // side
-        if (s0 != CSideSign1(o, vi, vi_next, l)) {
-            *result = false;
-            return;
+        int s1 = CSideSign1(o, vertices[i], vertices[(i + 1) % numVertices], coneAxis); 
+        if (s0 != s1) {
+            return false;  
         }
 
-        // intersection test
-        int s1 = CSideSign2(vi, o, r, l);
-        int s2 = CSideSign2(vi_next, o, r, l);
-
-        if (s1 == 0 || s2 == 0) {
-            *result = false; 
-            return;
+        // intersection
+        int s2 = CSideSign2(vertices[i], o, o + r, coneAxis);  
+        int s3 = CSideSign2(vertices[i+1], o, o + r, coneAxis);
+        if (s3 == 0 || s2 == 0) {
+            return false;  
         }
 
-        if ((s2 == s0) && (s1 != s2)) {
-            intNum++;
+        if (s3 == s0 && s3 != s2) {
+            n++;  // atomic operation for shared variable
+            if (n > 1) {
+                return false;
+            }
         }
-
-        if (intNum > 1) {
-            *result = false;  //>1
-            return;
-        }
-    }
-
-    *result = true;
+    
+     __syncthreads();
+   }
+  return true;
 }
 
 int main() {
@@ -358,5 +381,5 @@ __device__ void SelfCollideWithGuidedFrontTracking(BVHNode* N, BVTTFront* FrontN
     SelfCollideWithGuidedFrontTracking(N->leftChild, FrontN, CN);
     SelfCollideWithGuidedFrontTracking(N->rightChild, FrontN, CN);
 
-    FrontTracking(FrontN);
+    Collide(N->leftChild, N->rightChild);
 }
